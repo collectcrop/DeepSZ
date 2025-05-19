@@ -10,7 +10,7 @@ if not folder:
     os.makedirs("./SZ_compress_script")
 
 bash_line = "./SZ_compress_script/fc" + str(sys.argv[2]) + "_script.sh"
-output = open(bash_line, "w")
+output = open(bash_line, "w", newline="\n")
 
 wr_line = "echo start > ./data/compression_ratios_fc" + str(sys.argv[2]) + ".txt\n"
 output.writelines(wr_line)
@@ -26,3 +26,5 @@ for i in range(1,10):
     output.writelines(wr_line_3)
     output.writelines(wr_line_4)
     output.writelines(wr_line_5)
+    
+output.close()

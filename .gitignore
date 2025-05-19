@@ -1,0 +1,33 @@
+# 忽略 data 目录下的 test 数据，但保留其他可能的文件结构
+data/
+!data/.gitkeep
+
+# 忽略解压后的模型结果
+decompressed_model/
+*.pth
+
+# 忽略SZ
+SZ/
+
+# 如果用了 PyTorch Lightning 或其他库产生日志
+lightning_logs/
+logs/
+
+# 忽略 Python 编译缓存
+__pycache__/
+*.py[cod]
+
+# 忽略 Jupyter notebook 检查点（如果你用 .ipynb 文件）
+.ipynb_checkpoints/
+
+# 忽略 VSCode 设置文件（如果你用 VSCode）
+.vscode/
+
+# 忽略虚拟环境文件夹
+env/
+venv/
+
+# 忽略系统文件
+.DS_Store
+Thumbs.db
+
