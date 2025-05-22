@@ -1,5 +1,7 @@
 # DeepSZ
 
+Compared to original version, I have modified the original DeepSZ code to make it work with Pytorch. 
+
 ## About DeepSZ
 
 DeepSZ [1] is an accuracy-loss expected neural network compression framework, which involves four key steps: network pruning, error bound assessment, optimization for error bound configuration, and compressed model generation, featuring a high compression ratio and low encoding time. The paper is available at: https://dl.acm.org/doi/10.1145/3307681.3326608.
@@ -11,12 +13,12 @@ This repo is an implementation of DeepSZ based on Caffe deep learning framework 
 Anaconda 3 with Python 3.6+
 NVIDIA CUDA 10+
 GCC 6.3 or GCC 7.3
-Caffe 1.0
+pytorch 2.5.1 
 SZ 2.0+
-ImageNet validation dataset
+tiny-ImageNet-200 validation dataset
 ```
 
-## Install Caffe/PyCaffe (via Anaconda)
+## Install Pytorch (via Anaconda)
 - Download and install Anaconda:
 ```
 wget https://repo.anaconda.com/archive/Anaconda3-2020.02-Linux-x86_64.sh
@@ -27,85 +29,33 @@ bash Anaconda3-2020.02-Linux-x86_64.sh
 ```
 conda create -n deepsz_env
 conda activate deepsz_env
-conda install protobuf glog gflags hdf5 openblas boost snappy leveldb lmdb pkgconfig zlib opencv cudnn
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
+conda install pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
-Note that "conda install cudnn" will automatically install another cudatoolkit (different from your system default one), so you can use "conda install cudatoolkit=[version number]" to make sure the two version are consistent; otherwise, runtime will report an error. For example, in TACC Frontera, you can use "module load cuda/10.1" and "conda install cudnn cudatoolkit=10.1". 
 
 - Download DeepSZ:
 ```
 git clone https://github.com/szcompressor/DeepSZ.git
 ```
 
-- Download Caffe/PyCaffe:
-```
-git clone https://github.com/BVLC/caffe.git
-cp DeepSZ/Makefile.config caffe/
-cd caffe
-```
-
-- Modify dependencies’ paths in Makefile.config, including CUDA_DIR (line 30), CUDA_ARCH (line 39), PYTHON_LIBRARIES (line 78), PYTHON_INCLUDE (line 79-80), INCLUDE_DIRS (line 94), LIBRARY_DIRS (line 95), USE_NCCL (line 103).
-
-- Note if you are using Python 3.7, please change "boost_python3" to "boost_python37" (line 57) of Makefile.config.
-
-- Note that our default CUDA_ARCH in Makefile.config is for Frontera's NVIDIA RTX 5000 GPUs (working for Tesla V100 as well), please adapt CUDA_ARCH to your GPU and CUDA accordingly.
-```
-CUDA_ARCH := -gencode arch=compute_52,code=sm_52 \
-                -gencode arch=compute_60,code=sm_60 \
-                -gencode arch=compute_61,code=sm_61 \
-                -gencode arch=compute_70,code=sm_70 \
-                -gencode arch=compute_75,code=sm_75 \
-                -gencode arch=compute_75,code=compute_75
-```
-
-- Note that if you want to enable NCCL (USE_NCCL := 1), please add your NCCL path to INCLUDE_DIRS and LIBRARY_DIRS in Makefile.config and LD_LIBRARY_PATH. 
-
-- Compile and Install Caffe/PyCaffe:
-```
-make all -j 4
-make pycaffe
-```
-
-- Install PyCaffe's dependency:
-```
-pip install scikit-image
-```
-
-## Test PyCaffe
-- Please add your PyCaffe path into your PYTHONPATH, e.g.:
-```
-export PYTHONPATH=$PYTHONPATH:/home1/06128/dtao/caffe/python
-```
-
-- Please add your conda library path into your LD_LIBRARY_PATH, e.g.:
-```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home1/06128/dtao/anaconda3/envs/deepsz_env/lib
-```
-
-- Then, please try “import caffe” in Python; if no error is reported, PyCaffe is working!!
-
 ## Download Validation Dataset and DNN Model
-- Please download AlexNet model into DeepSZ root directory:
+- Please download or train AlexNet or other models into DeepSZ /data directory:
+here are some dataset links:
 ```
-wget https://eecs.wsu.edu/~dtao/deepsz/caffenet_pruned.caffemodel
-```
-
-- Please download ImageNet validation data and put them to e.g. /work/06128/dtao/frontera/caffedata:
-```
-wget https://eecs.wsu.edu/~dtao/deepsz/imagenet_mean.binaryproto
-wget https://eecs.wsu.edu/~dtao/deepsz/ilsvrc12_val_lmdb.tar.gz
-tar -xzvf ilsvrc12_val_lmdb.tar.gz
+wget http://cs231n.stanford.edu/tiny-imagenet-200.zip
 ````
 
 ## Run DeepSZ
 
-- After installing PyCaffe, please go to DeepSZ’s root directory and modify the first lines of "launch.sh", "reassemble_and_test.py", and "optimize.py" to your Caffe directory (e.g., /home1/06128/dtao/caffe) and PyCaffe directory (e.g., /home1/06128/dtao/caffe/python).
+- After installing PyTorch, please execute **build_SZ.sh** to download and compile SZ lossy compression software.This will be used to compress the network.
 
-- Then, please change line 40 and line 51 of “train_val.prototxt” to match your imagenet_mean.binaryproto file location (e.g., /work/06128/dtao/frontera/caffedata) and your ImageNet validation data file location (e.g., /work/06128/dtao/frontera/caffedata/ilsvrc12_val_lmdb).
+- Then, you should train or download the pre-trained model into the DeepSZ /model directory.If you want to use other models, please modify the code to load the model.
 
 - Finally, please use the below command to run DeepSZ to compress the network and test the accuracy with the decompressed model:
 ```
-bash launch.sh
+python deepsz.py --model {model_name}
 ```
+- now it only supports AlexNet, vgg16 and lenet
 
 - Note that the script will automatically download and compile SZ lossy compression software. 
 

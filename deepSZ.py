@@ -22,8 +22,15 @@ def main():
     model_dir = Path(args.model_dir)
     output_dir = Path(args.output_dir)
     
-    os.system("python ./extract_weights_and_compression.py")    #extract weights compress and decompress
-    os.system("python ./reassemble_and_test.py 6")              #test on accuracy degradation with different compression ratio
-    os.system("python ./reassemble_and_test.py 7")
-    os.system("python ./reassemble_and_test.py 8")
-    os.system("python ./optimize.py")                           #optimize compression config for each layer and reconstruct model
+    os.system(f"python ./extract_weights_and_compression.py {model_name}")    #extract weights compress and decompress
+    if model_name == 'lenet5' or model_name == 'lenet-300-100':
+        r = range(1,4)
+    elif model_name == 'alexnet' or model_name == 'vgg16':
+        r = range(6,9)
+    for i in r:
+        bashline = f"python ./reassemble_and_test.py --model {model_name} --layer {i} --data_dir {data_dir} --model_dir {model_dir} --output_dir {output_dir}"
+        os.system(bashline)
+    os.system(f"python ./optimize.py {model_name}")                           #optimize compression config for each layer and reconstruct model
+    
+if __name__ == "__main__":
+    main()

@@ -15,6 +15,7 @@ output = open(bash_line, "w", newline="\n")
 wr_line = "echo start > ./data/compression_ratios_fc" + str(sys.argv[2]) + ".txt\n"
 output.writelines(wr_line)
 
+
 for i in range(1,10):
     wr_line_1 = "./SZ/build/bin/sz -z -f -c ./SZ/example/sz.config -M ABS -A " + str(i) + "E-3 -i ./data/fc" + str(sys.argv[2]) +"-data-o.dat -1 " + str(sys.argv[1]) + "\n"
     wr_line_2 = "./SZ/build/bin/sz -x -f -s ./data/fc" + str(sys.argv[2]) + "-data-o.dat.sz -1 " + str(sys.argv[1]) + "\n"

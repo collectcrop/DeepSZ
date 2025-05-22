@@ -5,7 +5,9 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from torchvision import datasets, transforms, models
+import torchvision
 from torch.utils.data import DataLoader
+from models.model_loader import get_model
 import argparse
 
 data_dir = Path("./data")
@@ -37,20 +39,20 @@ MODEL_CONFIGS = {
             "7": 3,
             "8": 6,
         }
+    },
+    "lenet5":{
+        "layer_shapes": {
+            "1": (120, 256),
+            "2": (84, 120),
+            "3": (10, 84),
+        },
+        "layer_indices": {
+            "1": 4,
+            "2": 6,
+            "3": 8,
+        }
     }
 }
-# ==== 模型加载函数 ====
-def get_model(model_type, num_classes=200):
-    if model_type == "alexnet":
-        model = models.alexnet()
-        model.classifier[6] = torch.nn.Linear(4096, num_classes)
-    elif model_type == "vgg16":
-        model = models.vgg16()
-        model.classifier[6] = torch.nn.Linear(4096, num_classes)
-    else:
-        raise ValueError(f"暂不支持模型类型：{model_type}")
-    return model
-
 # ==== 解压稀疏权重函数 ====
 def decompress_weights(data_path, index_path, shape):
     data = np.fromfile(data_path, dtype='float32')
@@ -68,11 +70,31 @@ def decompress_weights(data_path, index_path, shape):
 
     return np.reshape(feat, shape)
 
+def replace_weights(model, model_name, layer_idx, weight_tensor, device):
+    # 替换对应层权重
+    if model_name == "alexnet" or model_name == "vgg16":
+        model.classifier[layer_idx].weight.data = weight_tensor.to(device)
+    elif model_name == "lenet5" or model_name == "lenet300":
+        # 映射 layer_idx 到属性名
+        layer_map = {
+            4: 'fc1',
+            6: 'fc2',
+            8: 'fc3',
+        }
+        layer_name = layer_map.get(layer_idx)
+        if layer_name is None:
+            raise ValueError(f"Invalid layer index {layer_idx} for model {model_name}")
+
+        layer_module = getattr(model, layer_name)
+        if weight_tensor.shape != layer_module.weight.data.shape:
+            raise ValueError(f"Weight shape mismatch: expected {layer_module.weight.data.shape}, got {weight_tensor.shape}")
+
+        layer_module.weight.data = weight_tensor.to(device)
 # ==== 主函数入口 ====
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, required=True, choices=MODEL_CONFIGS.keys(), help="Model name")
-    parser.add_argument('--layer', type=str, required=True, choices=["6", "7", "8"], help="FC layer number")
+    parser.add_argument('--layer', type=str, required=True, help="FC layer number")
     parser.add_argument('--data_dir', type=str, default="./data", help="Dataset directory")
     parser.add_argument('--model_dir', type=str, default="./model", help="Directory to load base model")
     parser.add_argument('--output_dir', type=str, default="./decompressed_model", help="Output directory for modified models")
@@ -93,8 +115,13 @@ def main():
     layer_idx = config["layer_indices"][layer_num]
     
     # 加载模型
+    if model_name == 'lenet5' or model_name == 'lenet300':
+        num_classes = 10
+    elif model_name == 'alexnet' or model_name == 'vgg16':
+        num_classes = 200
+        
     print(f"Loding {model_name} ...")
-    model = get_model(model_name)
+    model = get_model(model_name,num_classes)
     model.load_state_dict(torch.load(model_dir / f"{model_name}.pth"))
     model.eval()
 
@@ -103,18 +130,27 @@ def main():
 
     # 准备验证集
     print("Loding test dataset...")
-    normalize = transforms.Normalize((0.4802, 0.4481, 0.3975), (0.2770, 0.2691, 0.2821))
-    transform = transforms.Compose([
-        transforms.Resize(224),
-        transforms.ToTensor(),
-        normalize,
-    ])
-    val_dir = data_dir / "tiny-imagenet-200/val"
-    if not val_dir.exists():
-        raise FileNotFoundError(f"test dataset not exist: {val_dir}")
-    val_dataset = datasets.ImageFolder(val_dir, transform=transform)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    if model_name == "alexnet" or model_name == "vgg16":
+        normalize = transforms.Normalize((0.4802, 0.4481, 0.3975), (0.2770, 0.2691, 0.2821))
+        transform = transforms.Compose([
+            transforms.Resize(224),
+            transforms.ToTensor(),
+            normalize,
+        ])
+        val_dir = data_dir / "tiny-imagenet-200/val"
+        if not val_dir.exists():
+            raise FileNotFoundError(f"test dataset not exist: {val_dir}")
+        val_dataset = datasets.ImageFolder(val_dir, transform=transform)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
+    elif model_name == "lenet5" or model_name == "lenet300":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
+        val_dataset = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=False)
+    
     # 精度记录
     accuracy = np.zeros(11, dtype='float32')
 
@@ -131,8 +167,7 @@ def main():
         feat = decompress_weights(data_file, index_file, (x, y))
         weight_tensor = torch.tensor(feat, dtype=torch.float32)
 
-        # 替换对应层权重
-        model.classifier[layer_idx].weight.data = weight_tensor.to(device)
+        replace_weights(model, model_name, layer_idx, weight_tensor, device)
 
         # 保存模型
         model_path = output_dir / f"{model_name}_fc{layer_num}_{i}E-3.pth"

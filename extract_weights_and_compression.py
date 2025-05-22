@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 from pathlib import Path
-
+from models.model_loader import get_model
 
 data_dir = Path("./data")
 model_dir = Path("./model")
@@ -17,6 +17,30 @@ def load_model(model_name):
     else:
         print("model not exists!")
         os._exit(0)
+        
+def count_fc_params(model, model_name):
+    total_params = 0
+
+    if model_name in ["alexnet", "vgg16"]:
+        for layer in model.classifier:
+            if isinstance(layer, torch.nn.Linear):
+                total_params += layer.weight.numel()
+                if layer.bias is not None:
+                    total_params += layer.bias.numel()
+
+    elif model_name in ["lenet5", "lenet300"]:
+        fc_layers = ['fc1', 'fc2', 'fc3']
+        for name in fc_layers:
+            layer = getattr(model, name, None)
+            if layer is not None:
+                total_params += layer.weight.numel()
+                if layer.bias is not None:
+                    total_params += layer.bias.numel()
+
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
+
+    return total_params
 
 def compress_fc_layer(tensor, layer_name, layer_idx):
     print(f"cope with layer {layer_name} ...")
@@ -108,6 +132,22 @@ def main():
         os.makedirs('./data')
 
     state_dict = load_model(model_type)
+    if model_type == 'lenet5' or model_type == 'lenet300':
+        num_classes = 10
+    elif model_type == 'alexnet' or model_type == 'vgg16':
+        num_classes = 200
+    
+    # 记录压缩前fc层总大小
+    model = get_model(model_type,num_classes)
+    model.load_state_dict(state_dict)
+    model.eval()
+    total_params = count_fc_params(model, model_type)
+    size = total_params * 32
+    print(f"Total FC layer parameters (uncompressed): {total_params}")
+    print(f"Size in bytes (float32): {total_params * 4} Bytes, or {total_params * 4 / 1024:.2f} KB")
+    with open(f"{data_dir}/{model_type}-origin-fc-size.txt", "w") as f:
+        f.write(f"{size}\n")
+    # 开始压缩
     compress_model_layers(state_dict, model_type)
 
     print("all done!")
